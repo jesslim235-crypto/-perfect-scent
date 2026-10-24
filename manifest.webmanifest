@@ -1,0 +1,17 @@
+{
+  "name": "Perfect Scent — Consultor Pessoal de Perfumes",
+  "short_name": "Perfect Scent",
+  "description": "Seu consultor pessoal de perfumes.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#11110f",
+  "theme_color": "#151411",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

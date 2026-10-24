@@ -1,0 +1,29 @@
+PERFECT SCENT — VERSÃO INICIAL INSTALÁVEL
+
+CONTEÚDO
+- index.html: interface do app
+- manifest.webmanifest: configuração para instalação como PWA
+- sw.js: cache básico para recursos locais
+- icon.svg: ícone do app
+
+COMO TESTAR
+1. Extraia todos os arquivos da pasta ZIP.
+2. Para testar a interface, abra index.html em um navegador moderno.
+3. Para instalar como aplicativo (PWA), publique a pasta em uma hospedagem HTTPS.
+   Service workers e instalação normalmente exigem HTTPS ou localhost.
+4. No celular, abra o endereço publicado e use a opção do navegador "Adicionar à Tela de Início".
+
+O QUE FUNCIONA NESTA VERSÃO
+- Seleção de ocasião, imagem e dia/noite.
+- Cadastro e remoção de perfumes sem preenchimento manual das características.
+- Salvamento local da coleção no navegador.
+- Consulta de clima via Open-Meteo, mediante permissão de localização e conexão.
+
+O QUE AINDA PRECISA SER CONSTRUÍDO
+- Backend com autenticação e sincronização entre dispositivos.
+- Serviço de pesquisa/identificação de fragrâncias, com fontes, proveniência e grau de confiança.
+- Integração segura com um modelo de IA e motor de recomendação.
+- Hospedagem pública e testes em dispositivos reais.
+
+IMPORTANTE
+A tela não finge que a identificação de perfumes por IA já funciona: sem o serviço de fragrâncias conectado, ela informa essa limitação em vez de inventar notas ou recomendar com dados inexistentes.
