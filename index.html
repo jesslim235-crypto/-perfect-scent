@@ -78,7 +78,29 @@ let syncing = false;
 const email = () => document.getElementById('ps-email').value.trim();
 const password = () => document.getElementById('ps-password').value;
 const message = text => { status.textContent = text; };
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-remove]');
+  if (!button || !currentUser) return;
 
+  const perfume = collection.find(
+    p => String(p.id) === button.dataset.remove
+  );
+  if (!perfume) return;
+
+  const { error } = await db
+    .from('user_perfumes')
+    .delete()
+    .eq('user_id', currentUser.id)
+    .eq('name', perfume.name)
+    .eq('brand', perfume.brand || '');
+
+  if (error) {
+    console.error(error);
+    message('Erro ao excluir do banco. Tente novamente.');
+  } else {
+    message('Perfume excluído da sua conta.');
+  }
+}, true);
 async function syncCollection() {
 if (!currentUser || syncing) return;
 syncing = true;
