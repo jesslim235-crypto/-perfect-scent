@@ -48,5 +48,132 @@ let climate=weather?`A consulta meteorológica mais recente registrou ${Math.rou
 $('#resultContent').innerHTML=`<div class="empty" style="margin-top:14px"><strong>Próxima etapa: identificar sua coleção.</strong><br>Você cadastrou ${collection.length} ${collection.length===1?'perfume':'perfumes'}. A interface ainda não está conectada à base de fragrâncias nem à IA de recomendação; por isso, não vou inventar notas ou escolher um vencedor sem conhecer os perfumes de verdade.<br><br><strong>Seu pedido:</strong> ${esc(occasion)} · ${esc(desiredImage)} · ${esc(period)}.<br>${esc(climate)}<br><br>Para completar essa função, será preciso conectar uma API/serviço de pesquisa e IA no backend, verificar os dados em fontes confiáveis e só então pontuar os perfumes cadastrados.</div>`;card.scrollIntoView({behavior:'smooth'})}
 $('#recommendBtn').onclick=recommend;render();
 if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script> <!-- Perfect Scent: cadastro, login e sincronizacao -->
+<div id="ps-auth" style="margin:20px 0;padding:18px;border:1px solid #51452f;border-radius:16px;background:#1b1a17;color:#f6f1e8;font-family:Arial,sans-serif">
+<h3 style="margin-top:0">Sua conta Perfect Scent</h3>
+<p id="ps-status">Entre ou crie sua conta para sincronizar seus perfumes.</p>
+<input id="ps-email" type="email" placeholder="Seu e-mail" autocomplete="email" style="box-sizing:border-box;width:100%;padding:12px;margin:6px 0;background:#11110f;color:white;border:1px solid #51452f;border-radius:8px">
+<input id="ps-password" type="password" placeholder="Senha (mínimo 6 caracteres)" autocomplete="current-password" style="box-sizing:border-box;width:100%;padding:12px;margin:6px 0;background:#11110f;color:white;border:1px solid #51452f;border-radius:8px">
+<button id="ps-signup" type="button" style="padding:12px;margin:6px 4px 6px 0;border:0;border-radius:8px;background:#d8b875;color:#211b10">Criar conta</button>
+<button id="ps-login" type="button" style="padding:12px;margin:6px 0;border:1px solid #d8b875;border-radius:8px;background:#24221d;color:white">Entrar</button>
+<button id="ps-logout" type="button" style="display:none;padding:12px;margin:6px 0;border-radius:8px;background:#24221d;color:white">Sair</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(async function () {
+const SUPABASE_URL = 'https://tsgtypfaxfbrndjmnzem.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_F914HYTjOc3MpFDvRpnFTg_UfTxGqbv';
+const status = document.getElementById('ps-status');
+
+if (!window.supabase) {
+status.textContent = 'Não foi possível carregar a conexão. Atualize a página e tente novamente.';
+return;
+}
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let currentUser = null;
+let syncing = false;
+
+const email = () => document.getElementById('ps-email').value.trim();
+const password = () => document.getElementById('ps-password').value;
+const message = text => { status.textContent = text; };
+
+async function syncCollection() {
+if (!currentUser || syncing) return;
+syncing = true;
+
+try {
+const localItems = Array.isArray(collection) ? collection : [];
+const { data, error } = await db.from('user_perfumes')
+.select('id,name,brand')
+.eq('user_id', currentUser.id);
+
+if (error) throw error;
+
+const known = new Set((data || []).map(p =>
+(p.name + '|' + (p.brand || '')).toLowerCase()
+));
+
+const merged = [...(data || []).map(p => ({
+id: p.id, name: p.name, brand: p.brand || '',
+profileVerified: false
+}))];
+
+for (const p of localItems) {
+const key = (p.name + '|' + (p.brand || '')).toLowerCase();
+if (!known.has(key)) merged.push(p);
+}
+
+const rows = merged.map(p => ({
+id: p.id,
+user_id: currentUser.id,
+name: p.name,
+brand: p.brand || ''
+}));
+
+if (rows.length) {
+const { error: writeError } = await db.from('user_perfumes')
+.upsert(rows, { onConflict: 'id' });
+if (writeError) throw writeError;
+}
+
+collection = merged;
+localStorage.setItem(STORAGE, JSON.stringify(collection));
+render();
+message('Conta conectada. Coleção sincronizada com o Supabase.');
+} catch (error) {
+console.error(error);
+message('Não foi possível sincronizar. Confira as permissões da tabela user_perfumes.');
+} finally {
+syncing = false;
+}
+}
+
+document.getElementById('ps-signup').onclick = async () => {
+if (!email() || password().length < 6) {
+message('Informe um e-mail válido e uma senha com pelo menos 6 caracteres.');
+return;
+}
+const { data, error } = await db.auth.signUp({
+email: email(), password: password(),
+options: { emailRedirectTo: location.origin + location.pathname }
+});
+if (error) return message('Erro no cadastro: ' + error.message);
+if (data.session) {
+currentUser = data.user; await syncCollection();
+} else {
+message('Cadastro iniciado! Confira seu e-mail para confirmar a conta antes de entrar.');
+}
+};
+
+document.getElementById('ps-login').onclick = async () => {
+const { data, error } = await db.auth.signInWithPassword({
+email: email(), password: password()
+});
+if (error) return message('Erro ao entrar: ' + error.message);
+currentUser = data.user;
+await syncCollection();
+};
+
+document.getElementById('ps-logout').onclick = async () => {
+const { error } = await db.auth.signOut();
+if (error) return message('Não foi possível sair: ' + error.message);
+currentUser = null;
+document.getElementById('ps-logout').style.display = 'none';
+document.getElementById('ps-login').style.display = '';
+document.getElementById('ps-signup').style.display = '';
+message('Você saiu da conta. Seus perfumes salvos no navegador continuam aqui.');
+};
+
+const { data: sessionData } = await db.auth.getSession();
+if (sessionData.session) {
+currentUser = sessionData.session.user;
+document.getElementById('ps-logout').style.display = '';
+document.getElementById('ps-login').style.display = 'none';
+document.getElementById('ps-signup').style.display = 'none';
+await syncCollection();
+}
+})();
 </script>
 </body></html>
