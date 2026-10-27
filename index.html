@@ -43,7 +43,6 @@ choiceGroup('#occasionChoices',v=>occasion=v);choiceGroup('#imageChoices',v=>des
   async function identifyPerfume(perfume) { const clean = value => (value || '') .normalize('NFD') .replace(/[\u0300-\u036f]/g, '') .toLowerCase() .replace(/[^a-z0-9]/g, '');
 try { const response = await fetch( 'https://www.scento.com/api/perfume/v1/search?q=' + encodeURIComponent(perfume.name) + '&kind=perfume' );
 
-JavaScript
 if (!response.ok) return null;
 
 const results = await response.json();
