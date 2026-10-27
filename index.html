@@ -87,12 +87,11 @@ document.addEventListener('click', async event => {
   );
   if (!perfume) return;
 
-  const { error } = await db
-    .from('user_perfumes')
-    .delete()
-    .eq('user_id', currentUser.id)
-    .eq('name', perfume.name)
-    .eq('brand', perfume.brand || '');
+ const { error } = await db
+  .from('user_perfumes')
+  .delete()
+  .eq('user_id', currentUser.id)
+  .eq('id', perfume.id);
 
   if (error) {
     console.error(error);
