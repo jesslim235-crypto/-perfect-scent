@@ -40,8 +40,102 @@ function save(){try{localStorage.setItem(STORAGE,JSON.stringify(collection))}cat
 function render(){ $('#collectionCount').textContent=`${collection.length} ${collection.length===1?'perfume':'perfumes'}`;let el=$('#collectionList');if(!collection.length){el.innerHTML='<div class="empty">Sua coleção ainda está vazia.<br>Adicione seu primeiro perfume acima.</div>';return}el.innerHTML=collection.map(p=>`<div class="perfume"><div><strong>${esc(p.name)}${p.brand?' · '+esc(p.brand):''}</strong><small>${p.profileVerified?'Perfil identificado automaticamente':'Aguardando identificação olfativa por fonte confiável'}</small></div><button aria-label="Remover ${esc(p.name)}" data-remove="${esc(p.id)}">×</button></div>`).join('');$$('[data-remove]').forEach(b=>b.onclick=()=>{collection=collection.filter(p=>p.id!==b.dataset.remove);save();toast('Perfume removido.')})}
 function choiceGroup(id,set){$(id).addEventListener('click',e=>{let b=e.target.closest('[data-value]');if(!b)return;$(id).querySelectorAll('[data-value]').forEach(x=>x.classList.toggle('active',x===b));set(b.dataset.value)})}
 choiceGroup('#occasionChoices',v=>occasion=v);choiceGroup('#imageChoices',v=>desiredImage=v);choiceGroup('#periodChoices',v=>period=v);
-$('#perfumeForm').addEventListener('submit',e=>{e.preventDefault();let name=$('#perfumeName').value.trim();if(!name)return;collection.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),name,brand:$('#perfumeBrand').value.trim(),profileVerified:false});save();e.target.reset();toast('Perfume adicionado à coleção.');});
-async function getWeather(){if(!navigator.geolocation){toast('Este navegador não disponibiliza localização.');return}$('#weatherTitle').textContent='Consultando localização…';$('#weatherText').textContent='Aguarde.';navigator.geolocation.getCurrentPosition(async pos=>{try{let {latitude:lat,longitude:lon}=pos.coords;let u=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code&hourly=temperature_2m,relative_humidity_2m,precipitation_probability&timezone=auto&forecast_days=2`;let r=await fetch(u);if(!r.ok)throw 0;weather=await r.json();let c=weather.current,wx=codes[c.weather_code]||['🌡','Condições meteorológicas'];$('#weatherIcon').textContent=wx[0];$('#weatherTitle').textContent=`${Math.round(c.temperature_2m)}°C · ${wx[1]}`;$('#weatherText').textContent=`Sensação ${Math.round(c.apparent_temperature)}°C · umidade ${c.relative_humidity_2m}% · fuso local: ${weather.timezone}.`;toast('Clima consultado.')}catch{$('#weatherTitle').textContent='Clima indisponível';$('#weatherText').textContent='Não foi possível obter a previsão. Você pode continuar sem esses dados.';toast('Falha ao consultar o clima.')}},()=>{$('#weatherTitle').textContent='Localização não autorizada';$('#weatherText').textContent='Permita o acesso à localização nas configurações do navegador.';toast('Sem permissão de localização.')},{timeout:12000,maximumAge:600000})}
+  async function identifyPerfume(perfume) { const clean = value => (value || '') .normalize('NFD') .replace(/[\u0300-\u036f]/g, '') .toLowerCase() .replace(/[^a-z0-9]/g, '');
+try { const response = await fetch( 'https://www.scento.com/api/perfume/v1/search?q=' + encodeURIComponent(perfume.name) + '&kind=perfume' );
+
+JavaScript
+if (!response.ok) return null;
+
+const results = await response.json();
+const matches = results.detail?.matches || [];
+
+const match = matches.find(item =>
+  item.kind === 'perfume' &&
+  clean(item.name) === clean(perfume.name) &&
+  (!perfume.brand ||
+    clean(item.house) === clean(perfume.brand))
+);
+
+if (!match) return null;
+
+const pageSlug = match.page.split('/').filter(Boolean).pop();
+const nameSlug = match.name
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-|-$/g, '');
+
+let data = null;
+
+for (const slug of [...new Set([nameSlug, pageSlug])]) {
+  try {
+    const res = await fetch(
+      'https://www.scento.com/api/perfume/v1/perfumes/' +
+      encodeURIComponent(slug)
+    );
+
+    if (!res.ok) continue;
+
+    const json = await res.json();
+
+    if (
+      json.detail?.name &&
+      clean(json.detail.name) === clean(match.name) &&
+      (!perfume.brand ||
+        clean(json.detail.house) === clean(perfume.brand))
+    ) {
+      data = json;
+      break;
+    }
+  } catch {}
+}
+
+if (!data) return null;
+
+return {
+  ...perfume,
+  name: data.detail.name,
+  brand: data.detail.house || perfume.brand,
+  profileVerified: true,
+  profile: data.detail,
+  sourceUrl: data.scento_page?.url || match.page
+};
+} catch { return null; } }
+$('#perfumeForm').addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const name = $('#perfumeName').value.trim();
+  const brand = $('#perfumeBrand').value.trim();
+
+  if (!name) return;
+
+  const perfume = {
+    id: crypto.randomUUID
+      ? crypto.randomUUID()
+      : String(Date.now()),
+    name,
+    brand,
+    profileVerified: false
+  };
+
+  collection.push(perfume);
+  save();
+  e.target.reset();
+  toast('Perfume adicionado! Identificando fragrância...');
+
+  const identified = await identifyPerfume(perfume);
+
+  if (identified) {
+    collection = collection.map(item =>
+      item.id === perfume.id ? identified : item
+    );
+    save();
+    toast('Perfume identificado com sucesso!');
+  } else {
+    toast('Não encontrado na base. O perfume continua salvo.');
+  }
+});async function getWeather(){if(!navigator.geolocation){toast('Este navegador não disponibiliza localização.');return}$('#weatherTitle').textContent='Consultando localização…';$('#weatherText').textContent='Aguarde.';navigator.geolocation.getCurrentPosition(async pos=>{try{let {latitude:lat,longitude:lon}=pos.coords;let u=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code&hourly=temperature_2m,relative_humidity_2m,precipitation_probability&timezone=auto&forecast_days=2`;let r=await fetch(u);if(!r.ok)throw 0;weather=await r.json();let c=weather.current,wx=codes[c.weather_code]||['🌡','Condições meteorológicas'];$('#weatherIcon').textContent=wx[0];$('#weatherTitle').textContent=`${Math.round(c.temperature_2m)}°C · ${wx[1]}`;$('#weatherText').textContent=`Sensação ${Math.round(c.apparent_temperature)}°C · umidade ${c.relative_humidity_2m}% · fuso local: ${weather.timezone}.`;toast('Clima consultado.')}catch{$('#weatherTitle').textContent='Clima indisponível';$('#weatherText').textContent='Não foi possível obter a previsão. Você pode continuar sem esses dados.';toast('Falha ao consultar o clima.')}},()=>{$('#weatherTitle').textContent='Localização não autorizada';$('#weatherText').textContent='Permita o acesso à localização nas configurações do navegador.';toast('Sem permissão de localização.')},{timeout:12000,maximumAge:600000})}
 $('#weatherBtn').onclick=getWeather;
 function recommend(){let card=$('#resultCard');card.classList.add('show');if(!collection.length){$('#resultContent').innerHTML='<div class="empty" style="margin-top:14px">Adicione primeiro os perfumes que você possui. O Perfect Scent só deve recomendar itens da sua coleção.</div>';card.scrollIntoView({behavior:'smooth'});return}
 let climate=weather?`A consulta meteorológica mais recente registrou ${Math.round(weather.current.temperature_2m)}°C e umidade de ${weather.current.relative_humidity_2m}%.`:'O clima ainda não foi consultado ou está indisponível.';
